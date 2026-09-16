@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitor de PDF para Excel</title>
+<style>
+  :root { --azul:#1F4E78; --cinza:#f4f6f9; --borda:#d9dee6; --verde:#0a7d3c; }
+  * { box-sizing:border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         margin:0; background:var(--cinza); color:#1c2530; }
+  header { background:var(--azul); color:#fff; padding:20px 24px; }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  header p { margin:4px 0 0; opacity:.85; font-size:13px; }
+  main { max-width:1000px; margin:24px auto; padding:0 16px; }
+  .card { background:#fff; border:1px solid var(--borda); border-radius:10px;
+          padding:20px 22px; margin-bottom:18px; }
+  label { font-weight:600; font-size:14px; display:block; margin-bottom:6px; }
+  input[type=file], select { width:100%; padding:10px; border:1px solid var(--borda);
+          border-radius:8px; background:#fafbfc; font-size:14px; }
+  input[type=file] { border-style:dashed; }
+  .opcoes { display:flex; gap:16px 20px; margin:14px 0; flex-wrap:wrap; align-items:center; }
+  .opcoes > label { font-weight:500; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; }
+  button { background:var(--azul); color:#fff; border:0; border-radius:8px;
+           padding:11px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button.secundario { background:var(--verde); }
+  button.leve { background:#eef2f7; color:#1c2530; padding:7px 14px; font-weight:500; }
+  .barra { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+  .sub { border:1px solid var(--borda); border-radius:8px; padding:14px; margin-top:8px; background:#fbfcfe; }
+  .linha2 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .aviso { background:#fff7e6; border:1px solid #ffd591; color:#7a4b00;
+           padding:10px 14px; border-radius:8px; font-size:13px; margin-top:12px; }
+  .erro { background:#fff1f0; border:1px solid #ffa39e; color:#a8071a;
+          padding:10px 14px; border-radius:8px; font-size:13px; margin-top:12px; }
+  .ok { background:#f6ffed; border:1px solid #b7eb8f; color:#237804;
+        padding:10px 14px; border-radius:8px; font-size:13px; margin-top:12px; }
+  .dica { font-size:12px; color:#7a8699; margin-top:6px; }
+  .rolagem { max-height:460px; overflow:auto; border:1px solid var(--borda);
+             border-radius:8px; margin-top:12px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { border:1px solid var(--borda); padding:0; text-align:left; }
+  th { background:var(--azul); position:sticky; top:0; z-index:2; }
+  .cel { padding:7px 10px; outline:none; min-width:90px; color:inherit; }
+  th .cel { color:#fff; font-weight:600; }
+  .cel:focus { background:#fffbe6; box-shadow:inset 0 0 0 2px #ffd54a; }
+  td.acao { width:34px; text-align:center; }
+  .xrow { background:none; border:0; color:#a8071a; cursor:pointer; font-size:16px; line-height:1; padding:6px; }
+  th.acao { background:var(--azul); }
+  .oculto { display:none; }
+  .spinner { display:inline-block; width:15px; height:15px; border:2px solid #fff;
+             border-top-color:transparent; border-radius:50%; animation:girar .7s linear infinite;
+             vertical-align:middle; margin-right:8px; }
+  @keyframes girar { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Leitor de PDF para Excel</h1>
+  <p>Sobe o documento, a IA lê e organiza os dados. Funciona com PDF digital e escaneado.</p>
+</header>
+
+<main>
+  <div class="card">
+    <label for="pdf">1. Documento PDF</label>
+    <input type="file" id="pdf" accept="application/pdf">
+
+    <div class="opcoes">
+      <span style="font-weight:600;font-size:14px;">2. Destino:</span>
+      <label><input type="radio" name="modo" value="branco" checked> Planilha em branco (baixar)</label>
+      <label><input type="radio" name="modo" value="template"> Template agora (baixar)</label>
+      <label><input type="radio" name="modo" value="servidor"> Planilha do servidor (anexar)</label>
+      <label><input type="radio" name="modo" value="local"> Meu arquivo local (gravar)</label>
+    </div>
+
+    <div id="areaTemplate" class="sub oculto">
+      <label for="template">Template Excel (.xlsx)</label>
+      <input type="file" id="template" accept=".xlsx,.xlsm">
+      <div class="dica">A IA encaixa os dados nas colunas do arquivo e devolve preenchido para baixar.</div>
+    </div>
+
+    <div id="areaServidor" class="sub oculto">
+      <label for="selServidor">Planilha de destino no servidor</label>
+      <div class="linha2">
+        <select id="selServidor" style="flex:1;min-width:200px;"></select>
+        <button type="button" class="leve" id="btnRecarregar">Atualizar lista</button>
+      </div>
+      <div class="dica">Os dados são anexados na próxima linha em branco deste arquivo, no servidor. Ninguém precisa baixar nada.</div>
+      <div class="linha2" style="margin-top:10px;">
+        <input type="file" id="novaPlanilha" accept=".xlsx" style="flex:1;min-width:200px;">
+        <button type="button" class="leve" id="btnRegistrar">Registrar nova</button>
+      </div>
+      <div class="dica">Registre uma planilha (.xlsx com cabeçalho) para ela aparecer na lista acima.</div>
+    </div>
+
+    <div id="areaLocal" class="sub oculto">
+      <label>Arquivo local (.xlsx)</label>
+      <div class="linha2">
+        <button type="button" class="leve" id="btnEscolherLocal">Escolher planilha do meu computador</button>
+        <span id="nomeLocal" class="dica"></span>
+      </div>
+      <div class="dica">Você escolhe o arquivo uma vez e autoriza a gravação. Cada leitura grava nele sem baixar cópia.</div>
+      <div id="avisoLocal" class="aviso oculto">
+        Seu navegador não suporta gravação direta em arquivo local. Use o Chrome ou o Edge, com o site em HTTPS ou localhost. Enquanto isso, use uma das outras opções.
+      </div>
+    </div>
+
+    <div class="barra">
+      <button id="btnExtrair">Ler documento</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card oculto" id="cardPreview">
+    <label>3. Confira e ajuste o que a IA extraiu</label>
+    <div id="observacoes"></div>
+    <div class="dica">Clique em qualquer célula ou cabeçalho para editar. Nada é salvo até você confirmar.</div>
+    <div class="rolagem"><table id="tabela"><thead></thead><tbody></tbody></table></div>
+    <div class="barra">
+      <button class="leve" id="btnAddLinha">+ Adicionar linha</button>
+      <button class="leve" id="btnAddColuna">+ Adicionar coluna</button>
+      <button class="secundario" id="btnSalvar">Salvar</button>
+    </div>
+    <div id="msgSalvar"></div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const suporteLocal = 'showOpenFilePicker' in window;
+
+let sessaoAtual = null;
+let modoLeitura = null;      // modo usado na leitura atual
+let handleLocal = null;      // FileSystemFileHandle do arquivo local
+
+// alterna as áreas conforme o destino escolhido
+document.querySelectorAll('input[name=modo]').forEach(r => {
+  r.addEventListener('change', () => {
+    const v = document.querySelector('input[name=modo]:checked').value;
+    $('areaTemplate').classList.toggle('oculto', v !== 'template');
+    $('areaServidor').classList.toggle('oculto', v !== 'servidor');
+    $('areaLocal').classList.toggle('oculto', v !== 'local');
+    if (v === 'servidor') carregarPlanilhas();
+    if (v === 'local' && !suporteLocal) $('avisoLocal').classList.remove('oculto');
+  });
+});
+
+function mostrarMsg(el, texto, tipo) {
+  $(el).innerHTML = texto ? `<div class="${tipo}">${texto}</div>` : '';
+}
+
+// ---------- planilhas do servidor ----------
+async function carregarPlanilhas() {
+  try {
+    const r = await fetch('/planilhas');
+    const d = await r.json();
+    const sel = $('selServidor');
+    sel.innerHTML = '';
+    if (!d.arquivos || d.arquivos.length === 0) {
+      sel.innerHTML = '<option value="">(nenhuma registrada ainda)</option>';
+    } else {
+      d.arquivos.forEach(a => {
+        const o = document.createElement('option');
+        o.value = a; o.textContent = a; sel.appendChild(o);
+      });
+    }
+  } catch (e) { /* silencioso */ }
+}
+
+$('btnRecarregar').addEventListener('click', carregarPlanilhas);
+
+$('btnRegistrar').addEventListener('click', async () => {
+  const f = $('novaPlanilha').files[0];
+  if (!f) { mostrarMsg('msg', 'Escolha um .xlsx para registrar.', 'erro'); return; }
+  const fd = new FormData(); fd.append('arquivo', f);
+  try {
+    const r = await fetch('/planilhas', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'Erro ao registrar.');
+    $('novaPlanilha').value = '';
+    await carregarPlanilhas();
+    $('selServidor').value = d.nome;
+    mostrarMsg('msg', 'Planilha registrada: ' + d.nome, 'ok');
+  } catch (e) { mostrarMsg('msg', e.message, 'erro'); }
+});
+
+// ---------- arquivo local ----------
+$('btnEscolherLocal').addEventListener('click', async () => {
+  if (!suporteLocal) { $('avisoLocal').classList.remove('oculto'); return; }
+  try {
+    const [h] = await window.showOpenFilePicker({
+      types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
+      multiple: false,
+    });
+    handleLocal = h;
+    $('nomeLocal').textContent = h.name;
+  } catch (e) { /* usuário cancelou */ }
+});
+
+// ---------- tabela editável ----------
+function celEditavel(valor, ehCabecalho) {
+  const div = document.createElement('div');
+  div.className = 'cel' + (ehCabecalho ? ' cabecalho' : '');
+  div.contentEditable = 'true';
+  div.textContent = valor == null ? '' : valor;
+  return div;
+}
+function novaLinhaEl(valores) {
+  const tr = document.createElement('tr');
+  valores.forEach(v => { const td = document.createElement('td'); td.appendChild(celEditavel(v, false)); tr.appendChild(td); });
+  const tdAcao = document.createElement('td'); tdAcao.className = 'acao';
+  const btn = document.createElement('button'); btn.className = 'xrow'; btn.title = 'Remover linha'; btn.textContent = '×';
+  btn.onclick = () => tr.remove(); tdAcao.appendChild(btn); tr.appendChild(tdAcao);
+  return tr;
+}
+function renderTabela(colunas, linhas) {
+  const thead = $('tabela').querySelector('thead'), tbody = $('tabela').querySelector('tbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+  const trh = document.createElement('tr');
+  colunas.forEach(c => { const th = document.createElement('th'); th.appendChild(celEditavel(c, true)); trh.appendChild(th); });
+  const thAcao = document.createElement('th'); thAcao.className = 'acao'; trh.appendChild(thAcao); thead.appendChild(trh);
+  linhas.forEach(l => tbody.appendChild(novaLinhaEl(colunas.map(c => l[c] ?? ''))));
+}
+function lerTabela() {
+  const cabecalhos = [...$('tabela').querySelectorAll('thead .cabecalho')].map(el => el.textContent.trim());
+  const linhas = [];
+  $('tabela').querySelectorAll('tbody tr').forEach(tr => {
+    const cels = [...tr.querySelectorAll('td .cel')]; const obj = {};
+    cabecalhos.forEach((c, i) => { obj[c] = cels[i] ? cels[i].textContent.trim() : ''; });
+    linhas.push(obj);
+  });
+  return { colunas: cabecalhos, linhas };
+}
+
+// ---------- ler documento ----------
+$('btnExtrair').addEventListener('click', async () => {
+  const pdf = $('pdf').files[0];
+  if (!pdf) { mostrarMsg('msg', 'Escolha um PDF primeiro.', 'erro'); return; }
+  const modo = document.querySelector('input[name=modo]:checked').value;
+
+  const fd = new FormData();
+  fd.append('pdf', pdf);
+
+  if (modo === 'template') {
+    const tpl = $('template').files[0];
+    if (!tpl) { mostrarMsg('msg', 'Escolha o template.', 'erro'); return; }
+    fd.append('template', tpl);
+  } else if (modo === 'servidor') {
+    const nome = $('selServidor').value;
+    if (!nome) { mostrarMsg('msg', 'Escolha ou registre uma planilha do servidor.', 'erro'); return; }
+    fd.append('planilhaServidor', nome);
+  } else if (modo === 'local') {
+    if (!suporteLocal) { $('avisoLocal').classList.remove('oculto'); return; }
+    if (!handleLocal) { mostrarMsg('msg', 'Escolha o arquivo local primeiro.', 'erro'); return; }
+    const arq = await handleLocal.getFile();
+    fd.append('template', arq, handleLocal.name);
+  }
+
+  mostrarMsg('msg', ''); mostrarMsg('msgSalvar', '');
+  $('btnExtrair').disabled = true;
+  $('btnExtrair').innerHTML = '<span class="spinner"></span>Lendo...';
+  $('cardPreview').classList.add('oculto');
+
+  try {
+    const r = await fetch('/extrair', { method: 'POST', body: fd });
+    const dados = await r.json();
+    if (!r.ok) throw new Error(dados.erro || 'Erro na leitura.');
+
+    sessaoAtual = dados.sessao;
+    modoLeitura = modo;
+    renderTabela(dados.colunas, dados.linhas);
+    $('observacoes').innerHTML = dados.observacoes
+      ? `<div class="aviso"><strong>Observações da IA:</strong> ${dados.observacoes}</div>` : '';
+
+    const btn = $('btnSalvar');
+    if (modo === 'servidor') btn.textContent = 'Salvar na planilha do servidor';
+    else if (modo === 'local') btn.textContent = 'Salvar no meu arquivo';
+    else btn.textContent = 'Gerar e baixar Excel';
+
+    $('cardPreview').classList.remove('oculto');
+    $('cardPreview').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    mostrarMsg('msg', e.message, 'erro');
+  } finally {
+    $('btnExtrair').disabled = false;
+    $('btnExtrair').textContent = 'Ler documento';
+  }
+});
+
+$('btnAddLinha').addEventListener('click', () => {
+  const nCols = $('tabela').querySelectorAll('thead .cabecalho').length;
+  $('tabela').querySelector('tbody').appendChild(novaLinhaEl(new Array(nCols).fill('')));
+});
+$('btnAddColuna').addEventListener('click', () => {
+  const trh = $('tabela').querySelector('thead tr');
+  const th = document.createElement('th'); th.appendChild(celEditavel('Nova coluna', true));
+  trh.insertBefore(th, trh.querySelector('.acao'));
+  $('tabela').querySelectorAll('tbody tr').forEach(tr => {
+    const td = document.createElement('td'); td.appendChild(celEditavel('', false));
+    tr.insertBefore(td, tr.querySelector('.acao'));
+  });
+});
+
+// ---------- salvar (comportamento por destino) ----------
+$('btnSalvar').addEventListener('click', async () => {
+  if (!sessaoAtual) return;
+  const { colunas, linhas } = lerTabela();
+  if (colunas.filter(c => c).length === 0) { mostrarMsg('msgSalvar', 'Defina ao menos uma coluna com nome.', 'erro'); return; }
+
+  const btn = $('btnSalvar'); const rotulo = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Salvando...';
+  mostrarMsg('msgSalvar', '');
+
+  try {
+    if (modoLeitura === 'servidor') {
+      const r = await fetch('/salvar-servidor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessao: sessaoAtual, colunas, linhas }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'Erro ao salvar.');
+      mostrarMsg('msgSalvar', `Salvo em ${d.arquivo}. ${d.adicionadas} registro(s) adicionado(s). A planilha agora tem ${d.total} registro(s).`, 'ok');
+    } else {
+      // branco, template e local geram o arquivo no servidor
+      const r = await fetch('/gerar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessao: sessaoAtual, colunas, linhas }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.erro || 'Erro ao gerar.'); }
+      const blob = await r.blob();
+
+      if (modoLeitura === 'local') {
+        const perm = await handleLocal.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') throw new Error('Permissão de gravação negada no arquivo.');
+        const w = await handleLocal.createWritable();
+        await w.write(blob); await w.close();
+        mostrarMsg('msgSalvar', `Gravado no arquivo ${handleLocal.name}. Sem baixar cópia.`, 'ok');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'planilha_preenchida.xlsx'; a.click();
+        URL.revokeObjectURL(url);
+        mostrarMsg('msgSalvar', 'Arquivo gerado e baixado.', 'ok');
+      }
+    }
+  } catch (e) {
+    mostrarMsg('msgSalvar', e.message, 'erro');
+  } finally {
+    btn.disabled = false; btn.textContent = rotulo;
+  }
+});
+</script>
+</body>
+</html>
